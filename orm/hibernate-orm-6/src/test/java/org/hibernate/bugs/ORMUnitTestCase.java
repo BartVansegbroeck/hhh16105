@@ -15,10 +15,12 @@
  */
 package org.hibernate.bugs;
 
+import org.assertj.core.api.Assertions;
 import org.hibernate.Session;
 import org.hibernate.Transaction;
 import org.hibernate.cfg.AvailableSettings;
 import org.hibernate.cfg.Configuration;
+import org.hibernate.test.Person;
 import org.hibernate.testing.junit4.BaseCoreFunctionalTestCase;
 import org.junit.Test;
 
@@ -37,8 +39,7 @@ public class ORMUnitTestCase extends BaseCoreFunctionalTestCase {
 	@Override
 	protected Class[] getAnnotatedClasses() {
 		return new Class[] {
-//				Foo.class,
-//				Bar.class
+				Person.class
 		};
 	}
 
@@ -70,10 +71,43 @@ public class ORMUnitTestCase extends BaseCoreFunctionalTestCase {
 	@Test
 	public void hhh123Test() throws Exception {
 		// BaseCoreFunctionalTestCase automatically creates the SessionFactory and provides the Session.
-		Session s = openSession();
-		Transaction tx = s.beginTransaction();
-		// Do stuff...
+		Session session = openSession();
+		Transaction tx = session.beginTransaction();
+		Person person = new Person(1, "Sherlock", "Holmes", "Surely");
+		session.persist(person);
 		tx.commit();
-		s.close();
+		session.close();
+
+		// Open session/transaction and set a single property, Entity becomes dirty and is persisted
+		session = openSession();
+		tx = session.beginTransaction();
+		Person personLoaded = session.get(Person.class, 1);
+		personLoaded.setLastName("Watson");
+		tx.commit();
+		session.close();
+
+		// Verify entity was persisted correctly
+		session = openSession();
+		tx = session.beginTransaction();
+		Person personReloaded = session.get(Person.class, 1);
+		Assertions.assertThat(personReloaded.getLastName()).isEqualTo("Watson");
+		tx.commit();
+		session.close();
+
+		// Open session/transaction and update a property in a hashmap with an AttributeConverter, Entity should become dirty and be persisted
+		session = openSession();
+		tx = session.beginTransaction();
+		Person personReloaded2 = session.get(Person.class, 1);
+		personReloaded2.getAttributes().put(Person.NICKNAME, "evil");
+		tx.commit();
+		session.close();
+
+		// Verify entity was persisted correctly, but hashmap was not detected as dirty
+		session = openSession();
+		tx = session.beginTransaction();
+		Person personReloaded3 = session.get(Person.class, 1);
+		Assertions.assertThat(personReloaded3.getAttributes().get(Person.NICKNAME)).isEqualTo("evil");
+		tx.commit();
+		session.close();
 	}
 }
